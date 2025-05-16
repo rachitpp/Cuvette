@@ -64,6 +64,20 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/users", userRoutes);
 app.use("/tasks", taskRoutes);
 
+// Root route handler
+app.get("/", (req: Request, res: Response) => {
+  res.status(200).json({
+    message: "Welcome to Task Management API",
+    version: "1.0.0",
+    documentation: "/api-docs",
+    healthCheck: "/health",
+    apiEndpoints: {
+      users: "/users",
+      tasks: "/tasks",
+    },
+  });
+});
+
 // Prevent service worker 404 in browser console
 app.get("/service-worker.js", (req: Request, res: Response) => {
   res.setHeader("Content-Type", "application/javascript");
