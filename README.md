@@ -10,6 +10,9 @@
   ![Swagger](https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black)
 
   <p>A robust, secure task management API built with TypeScript, Express.js, and MongoDB</p>
+  
+  <p>🌐 <b>Live API:</b> <a href="https://cuvette-2ft9.onrender.com/" target="_blank">https://cuvette-2ft9.onrender.com/</a></p>
+  <p>📚 <b>API Documentation:</b> <a href="https://cuvette-2ft9.onrender.com/api-docs" target="_blank">https://cuvette-2ft9.onrender.com/api-docs</a></p>
 </div>
 
 ## ✨ Features
@@ -180,6 +183,12 @@ Once the server is running, access the Swagger documentation at:
 
 ```
 http://localhost:3000/api-docs
+```
+
+For the deployed version, access the documentation at:
+
+```
+https://cuvette-2ft9.onrender.com/api-docs
 ```
 
 ## 🔄 Continuous Integration
