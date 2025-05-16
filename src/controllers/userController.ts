@@ -1,18 +1,16 @@
 import { Request, Response } from "express";
 import { validationResult } from "express-validator";
+import mongoose from "mongoose";
 import User, { IUser } from "../models/User";
 import { generateToken } from "../middlewares/authMiddleware";
-import mongoose from "mongoose";
+import { withRetry, withTransaction, formatDbError } from "../utils/dbHelpers";
 
-// @desc    Register a new user
-// @route   POST /users
-// @access  Public
+// Handle new user registration
 export const registerUser = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.status(400).json({ errors: errors.array() });
@@ -21,24 +19,27 @@ export const registerUser = async (
 
     const { username, email, password } = req.body;
 
-    // Check if user already exists
-    const userExists = await User.findOne({
-      $or: [{ email }, { username }],
-    });
+    try {
+      const user = await withTransaction(async (session) => {
+        const existingEmail = await User.findOne({ email }).session(session);
+        if (existingEmail) {
+          throw new Error("User with this email already exists");
+        }
 
-    if (userExists) {
-      res.status(400).json({ message: "User already exists" });
-      return;
-    }
+        const existingUsername = await User.findOne({ username }).session(
+          session
+        );
+        if (existingUsername) {
+          throw new Error("User with this username already exists");
+        }
 
-    // Create new user
-    const user = await User.create({
-      username,
-      email,
-      password,
-    });
+        const newUser = await User.create([{ username, email, password }], {
+          session,
+        });
 
-    if (user) {
+        return newUser[0];
+      });
+
       const userId = user._id as mongoose.Types.ObjectId;
       res.status(201).json({
         _id: userId,
@@ -46,20 +47,30 @@ export const registerUser = async (
         email: user.email,
         token: generateToken(userId.toString()),
       });
-    } else {
-      res.status(400).json({ message: "Invalid user data" });
+    } catch (error: any) {
+      if (error.message.includes("already exists")) {
+        res.status(409).json({ message: error.message });
+      } else if (error.name === "ValidationError") {
+        res.status(400).json({ message: formatDbError(error) });
+      } else {
+        throw error;
+      }
     }
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error });
+  } catch (error: any) {
+    console.error("Error registering user:", error);
+    res.status(500).json({
+      message: "Could not register user",
+      error:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : formatDbError(error),
+    });
   }
 };
 
-// @desc    Authenticate user & get token
-// @route   POST /users/login
-// @access  Public
+// Handle user login
 export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.status(400).json({ errors: errors.array() });
@@ -68,21 +79,15 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
 
     const { email, password } = req.body;
 
-    // Find user by email
-    const user = await User.findOne({ email });
+    const user = await withRetry(async () => {
+      const user = await User.findOne({ email });
+      if (!user) throw new Error("Invalid email or password");
 
-    if (!user) {
-      res.status(401).json({ message: "Invalid email or password" });
-      return;
-    }
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) throw new Error("Invalid email or password");
 
-    // Check if password matches
-    const isMatch = await user.comparePassword(password);
-
-    if (!isMatch) {
-      res.status(401).json({ message: "Invalid email or password" });
-      return;
-    }
+      return user;
+    });
 
     const userId = user._id as mongoose.Types.ObjectId;
     res.json({
@@ -91,27 +96,53 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       email: user.email,
       token: generateToken(userId.toString()),
     });
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error });
+  } catch (error: any) {
+    console.error("Error logging in:", error);
+    if (error.message.includes("Invalid email or password")) {
+      res.status(401).json({ message: "Invalid email or password" });
+    } else {
+      res.status(500).json({
+        message: "Server error",
+        error:
+          process.env.NODE_ENV === "production"
+            ? undefined
+            : formatDbError(error),
+      });
+    }
   }
 };
 
-// @desc    Get user profile
-// @route   GET /users/profile
-// @access  Private
+// Fetch current user's profile
 export const getUserProfile = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    const user = await User.findById(req.user?._id).select("-password");
-
-    if (user) {
-      res.json(user);
-    } else {
-      res.status(404).json({ message: "User not found" });
+    const userId = req.user?._id;
+    if (!userId) {
+      res.status(401).json({ message: "Not authorized" });
+      return;
     }
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error });
+
+    const user = await withRetry(async () => {
+      const user = await User.findById(userId).select("-password");
+      if (!user) throw new Error("User not found");
+      return user;
+    });
+
+    res.json(user);
+  } catch (error: any) {
+    console.error("Error getting user profile:", error);
+    if (error.message.includes("not found")) {
+      res.status(404).json({ message: formatDbError(error) });
+    } else {
+      res.status(500).json({
+        message: "Server error",
+        error:
+          process.env.NODE_ENV === "production"
+            ? undefined
+            : formatDbError(error),
+      });
+    }
   }
 };

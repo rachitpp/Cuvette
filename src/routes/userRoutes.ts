@@ -83,7 +83,7 @@ router.post(
  *                 type: string
  *     responses:
  *       200:
- *         description: User logged in successfully
+ *         description: Login successful
  *       401:
  *         description: Invalid credentials
  */
@@ -103,7 +103,7 @@ router.post(
  * @swagger
  * /users/profile:
  *   get:
- *     summary: Get user profile
+ *     summary: Get the current user's profile
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []

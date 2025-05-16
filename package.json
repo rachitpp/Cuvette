@@ -22,8 +22,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.14.3",
     "node-cron": "^4.0.5",
-    "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-jsdoc": "^6.2.5",
+    "swagger-ui-express": "^4.6.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

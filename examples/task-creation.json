@@ -1,0 +1,10 @@
+{
+  "title": "Complete Project Proposal",
+  "description": "Write and review the proposal for the client meeting",
+  "priority": "high",
+  "dueDate": "15-12-2023",
+  "estimatedTime": 120,
+  "tags": ["proposal", "writing", "client"],
+  "category": "Client Work",
+  "collaborators": []
+}

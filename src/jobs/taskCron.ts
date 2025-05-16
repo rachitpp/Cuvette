@@ -1,47 +1,43 @@
 import cron from "node-cron";
 import Task, { TaskStatus } from "../models/Task";
 
-// Function to auto-close tasks that are in-progress for more than 2 hours
+// Auto-close tasks stuck in progress for over 2 hours
 const autoCloseTasks = async () => {
   try {
-    console.log("Running auto-close tasks job...");
+    console.log("Auto-close job running...");
 
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-
-    // Find tasks that are in-progress and were started more than 2 hours ago
-    const tasksToClose = await Task.find({
+    const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+    const tasks = await Task.find({
       status: TaskStatus.IN_PROGRESS,
-      startedAt: { $lt: twoHoursAgo },
+      startedAt: { $lt: new Date(cutoff) },
     });
 
-    if (tasksToClose.length === 0) {
-      console.log("No tasks to auto-close");
+    if (!tasks.length) {
+      console.log("No tasks to close");
       return;
     }
 
-    console.log(`Found ${tasksToClose.length} tasks to auto-close`);
+    console.log(`Closing ${tasks.length} tasks`);
 
-    // Update tasks to DONE and set completedAt
-    const updatePromises = tasksToClose.map(async (task) => {
-      task.status = TaskStatus.DONE;
-      task.completedAt = new Date();
-      return task.save();
-    });
+    await Promise.all(
+      tasks.map((task) => {
+        task.status = TaskStatus.DONE;
+        task.completedAt = new Date();
+        return task.save();
+      })
+    );
 
-    await Promise.all(updatePromises);
-
-    console.log(`Successfully auto-closed ${tasksToClose.length} tasks`);
-  } catch (error) {
-    console.error("Error in auto-close tasks job:", error);
+    console.log("Auto-close complete");
+  } catch (err) {
+    console.error("Auto-close failed:", err);
   }
 };
 
-// Schedule cron job to run every 15 minutes
-// '*/15 * * * *' means "every 15 minutes"
+// Schedule every 15 minutes
 export const cronJob = cron.schedule("*/15 * * * *", autoCloseTasks);
 
-// Stop the job initially - we'll start it when the app starts
+// Hold off until DB is ready
 cronJob.stop();
 
-// For testing purposes
+// For manual triggering or tests
 export const runAutoCloseTasksJob = autoCloseTasks;

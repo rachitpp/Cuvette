@@ -1,11 +1,17 @@
+/** @type {import('jest').Config} */
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
-  roots: ["<rootDir>/src"],
-  testMatch: ["**/*.test.ts"],
-  verbose: true,
-  forceExit: true,
-  clearMocks: true,
-  resetMocks: true,
-  restoreMocks: true,
+  testMatch: ["**/__tests__/**/*.ts?(x)", "**/?(*.)+(spec|test).ts?(x)"],
+  transform: {
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        isolatedModules: true,
+      },
+    ],
+  },
+  testTimeout: 10000, // Increase test timeout to 10 seconds
+  setupFilesAfterEnv: ["./src/tests/setup.ts"],
+  coveragePathIgnorePatterns: ["/node_modules/", "/src/tests/"],
 };

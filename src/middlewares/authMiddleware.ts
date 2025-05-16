@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import User, { IUser } from "../models/User";
 
-// Extend Express Request interface to include user
+// Add user property to Express Request
 declare global {
   namespace Express {
     interface Request {
@@ -11,59 +11,61 @@ declare global {
   }
 }
 
-// Interface for JWT payload
 interface JwtPayload {
   id: string;
 }
 
-// Middleware to check if user is authenticated
+// Retrieve JWT secret (with fallback in dev)
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      console.error("JWT_SECRET not set in production");
+      throw new Error("Server configuration error");
+    }
+    console.warn("JWT_SECRET missing, using insecure fallback for development");
+    return "dev_secret_" + Math.random().toString(36).substring(2);
+  }
+  return secret;
+};
+
+// Protect routes using JWT
 export const protect = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
+  let token: string | undefined;
+
+  if (req.headers.authorization?.startsWith("Bearer")) {
+    token = req.headers.authorization.split(" ")[1];
+  }
+
+  if (!token) {
+    res.status(401).json({ message: "Not authorized, no token" });
+    return;
+  }
+
   try {
-    let token;
-
-    // Check for token in Authorization header
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith("Bearer")
-    ) {
-      token = req.headers.authorization.split(" ")[1];
-    }
-
-    // If no token, return unauthorized
-    if (!token) {
-      res.status(401).json({ message: "Not authorized, no token" });
-      return;
-    }
-
-    // Verify token
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "fallback_secret"
-    ) as JwtPayload;
-
-    // Get user from database
+    const decoded = jwt.verify(token, getJwtSecret()) as JwtPayload;
     const user = await User.findById(decoded.id).select("-password");
-
     if (!user) {
       res.status(401).json({ message: "Not authorized, user not found" });
       return;
     }
-
-    // Add user to request object
     req.user = user;
     next();
-  } catch (error) {
-    res.status(401).json({ message: "Not authorized, token failed" });
+  } catch (err: any) {
+    if (err instanceof jwt.TokenExpiredError) {
+      res.status(401).json({ message: "Token expired, please login again" });
+    } else if (err instanceof jwt.JsonWebTokenError) {
+      res.status(401).json({ message: "Invalid token" });
+    } else {
+      res.status(401).json({ message: "Authentication failed" });
+    }
   }
 };
 
-// Generate JWT token
-export const generateToken = (id: string): string => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || "fallback_secret", {
-    expiresIn: "30d",
-  });
-};
+// Generate a new JWT for a user
+export const generateToken = (id: string): string =>
+  jwt.sign({ id }, getJwtSecret(), { expiresIn: "30d" });
