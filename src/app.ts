@@ -95,6 +95,11 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
+// Add a health check endpoint
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "ok", message: "Server is healthy" });
+});
+
 // Serve frontend in production mode
 if (process.env.NODE_ENV === "production") {
   const clientPath = path.join(__dirname, "../client/build");
