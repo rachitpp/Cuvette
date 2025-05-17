@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { validationResult } from "express-validator";
 import mongoose from "mongoose";
-import User, { IUser } from "../models/User";
+import User, { IUser, UserRole } from "../models/User";
 import { generateToken } from "../middlewares/authMiddleware";
 import { withRetry, withTransaction, formatDbError } from "../utils/dbHelpers";
 
@@ -17,7 +17,7 @@ export const registerUser = async (
       return;
     }
 
-    const { username, email, password } = req.body;
+    const { username, email, password, role } = req.body;
 
     try {
       const user = await withTransaction(async (session) => {
@@ -33,7 +33,15 @@ export const registerUser = async (
           throw new Error("User with this username already exists");
         }
 
-        const newUser = await User.create([{ username, email, password }], {
+        // Create user with role if provided
+        const userData = {
+          username,
+          email,
+          password,
+          role: role || UserRole.USER, // Default to USER if no role provided
+        };
+
+        const newUser = await User.create([userData], {
           session,
         });
 
@@ -45,6 +53,7 @@ export const registerUser = async (
         _id: userId,
         username: user.username,
         email: user.email,
+        role: user.role,
         token: generateToken(userId.toString()),
       });
     } catch (error: any) {
@@ -94,6 +103,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       _id: userId,
       username: user.username,
       email: user.email,
+      role: user.role,
       token: generateToken(userId.toString()),
     });
   } catch (error: any) {

@@ -1,3 +1,23 @@
+// Setup mocks before imports to avoid reference errors
+jest.mock("../config/database", () => ({
+  connectDB: jest.fn().mockResolvedValue(null),
+}));
+
+// Mock Redis client
+jest.mock("../config/redis", () => ({
+  get: jest.fn(),
+  setEx: jest.fn(),
+  del: jest.fn(),
+  quit: jest.fn().mockResolvedValue(undefined),
+  connect: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock rate limiter middleware
+jest.mock("../middlewares/rateLimitMiddleware", () => ({
+  rateLimiter: (req, _res, next) => next(),
+}));
+
+// Now import actual modules
 import {
   jest,
   describe,
@@ -11,17 +31,12 @@ import { app } from "../app";
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 
-// Mock the database connection to prevent actual DB calls
-jest.mock("../config/database", () => ({
-  connectDB: jest.fn().mockResolvedValue(undefined),
-}));
-
 // Mock user for authentication tests
 const mockUser = {
   _id: "mockid123",
   username: "testuser",
   email: "test@example.com",
-  comparePassword: jest.fn().mockImplementation((password: string) => {
+  comparePassword: jest.fn().mockImplementation((password) => {
     return Promise.resolve(password === "Password123");
   }),
 };
@@ -56,7 +71,7 @@ jest.mock("../models/User", () => {
 
 // Mock auth middleware
 jest.mock("../middlewares/authMiddleware", () => ({
-  protect: jest.fn((_req: Request, _res: Response, next: Function) => next()),
+  protect: jest.fn((_req, _res, next) => next()),
   generateToken: jest.fn(() => "test-token"),
 }));
 

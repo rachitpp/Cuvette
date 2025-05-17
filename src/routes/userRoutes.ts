@@ -5,9 +5,22 @@ import {
   loginUser,
   getUserProfile,
 } from "../controllers/userController";
+import User, { UserRole } from "../models/User";
 import { protect } from "../middlewares/authMiddleware";
+import { authRateLimiter } from "../middlewares/rateLimitMiddleware";
+import {
+  requirePermission,
+  requirePermissions,
+  requireAnyPermission,
+  auditLog,
+} from "../middlewares/enhancedRbacMiddleware";
+import { Permission } from "../types/permissions";
+import { cache, invalidateCache } from "../middlewares/cacheMiddleware";
+import { CacheService } from "../services/cacheService";
+import { paginationMiddleware } from "../middlewares/paginationMiddleware";
 
 const router = express.Router();
+const cacheService = CacheService.getInstance();
 
 /**
  * @swagger
@@ -43,6 +56,7 @@ const router = express.Router();
  */
 router.post(
   "/",
+  authRateLimiter,
   [
     body("username")
       .trim()
@@ -57,7 +71,8 @@ router.post(
       .isLength({ min: 6 })
       .withMessage("Password must be at least 6 characters long"),
   ],
-  registerUser
+  registerUser,
+  invalidateCache("GET:users*") // Invalidate user-related caches on new registration
 );
 
 /**
@@ -89,6 +104,7 @@ router.post(
  */
 router.post(
   "/login",
+  authRateLimiter,
   [
     body("email")
       .trim()
@@ -113,6 +129,177 @@ router.post(
  *       401:
  *         description: Not authorized
  */
-router.get("/profile", protect, getUserProfile);
+router.get(
+  "/profile",
+  protect,
+  requirePermission(Permission.READ_PROFILE),
+  cache({
+    duration: 300, // 5 minutes
+    key: (req) => `user:${req.user!._id}:profile`,
+  }),
+  getUserProfile
+);
+
+/**
+ * @swagger
+ * /users/all:
+ *   get:
+ *     summary: Get all users (admin only)
+ *     tags: [Users]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of items per page
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of users with pagination
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden - Missing required permissions
+ */
+router.get(
+  "/all",
+  protect,
+  requirePermission(Permission.READ_ALL_USERS),
+  auditLog("Retrieved users list"),
+  paginationMiddleware({ defaultLimit: 10, maxLimit: 50 }),
+  cache({
+    duration: 600,
+    key: (req) =>
+      `users:all:page${req.pagination.page}:limit${req.pagination.limit}`,
+    condition: (req) => req.user?.role === UserRole.ADMIN,
+  }),
+  async (req, res) => {
+    try {
+      const total = await User.countDocuments();
+      const users = await User.find()
+        .select("-password")
+        .skip(req.pagination.skip)
+        .limit(req.pagination.limit);
+
+      res.json({
+        data: users,
+        total,
+      });
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /users/stats:
+ *   get:
+ *     summary: Get user statistics (managers and admins only)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User statistics
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden - Missing required permissions
+ */
+router.get(
+  "/stats",
+  protect,
+  requireAnyPermission([Permission.VIEW_METRICS, Permission.VIEW_TEAM_METRICS]),
+  auditLog("Viewed user statistics"),
+  cache({
+    duration: 300, // 5 minutes
+    key: "users:stats",
+  }),
+  async (req, res) => {
+    try {
+      const totalUsers = await User.countDocuments();
+      const usersByRole = await User.aggregate([
+        { $group: { _id: "$role", count: { $sum: 1 } } },
+      ]);
+
+      res.json({
+        totalUsers,
+        usersByRole: usersByRole.reduce(
+          (
+            acc: Record<string, number>,
+            curr: { _id: string; count: number }
+          ) => {
+            acc[curr._id] = curr.count;
+            return acc;
+          },
+          {}
+        ),
+      });
+    } catch (error) {
+      console.error("Error fetching user stats:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
+
+// Temporary debug endpoint
+router.get("/debug-roles", async (req, res) => {
+  try {
+    const users = await User.find().select("email username role");
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching users", error });
+  }
+});
+
+// Temporary endpoint to clear rate limits
+router.post("/debug-clear-limits", async (req, res) => {
+  try {
+    // Clear rate limit data
+    await User.updateMany({}, { $set: { loginAttempts: 0 } });
+    res.json({ message: "Rate limits cleared" });
+  } catch (error) {
+    res.status(500).json({ message: "Error clearing rate limits", error });
+  }
+});
+
+// Cache management routes (admin only)
+router.post(
+  "/cache/clear",
+  protect,
+  requirePermission(Permission.READ_ALL_USERS),
+  async (req, res) => {
+    try {
+      await cacheService.clearAll();
+      res.json({ message: "Cache cleared successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Error clearing cache" });
+    }
+  }
+);
+
+router.get(
+  "/cache/stats",
+  protect,
+  requirePermission(Permission.READ_ALL_USERS),
+  async (req, res) => {
+    try {
+      const stats = cacheService.getStats();
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching cache stats" });
+    }
+  }
+);
 
 export default router;

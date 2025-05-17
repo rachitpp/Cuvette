@@ -7,4 +7,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REDIS_URL
+        value: redis://default:6vZLMldS4PHS0t3JWxpjubvDQjupe8xE@redis-19270.crce179.ap-south-1-1.ec2.redns.redis-cloud.com:19270
     healthCheckPath: /api/health

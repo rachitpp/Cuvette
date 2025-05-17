@@ -1,10 +1,17 @@
 import mongoose, { Document, Schema } from "mongoose";
 import bcrypt from "bcrypt";
 
+export enum UserRole {
+  USER = "user",
+  MANAGER = "manager",
+  ADMIN = "admin",
+}
+
 export interface IUser extends Document {
   username: string;
   email: string;
   password: string;
+  role: UserRole;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -44,6 +51,15 @@ const userSchema = new Schema<IUser>(
         message:
           "Password must have at least one uppercase, one lowercase, and one number",
       },
+    },
+    role: {
+      type: String,
+      enum: {
+        values: Object.values(UserRole),
+        message: "Invalid role. Must be one of: user, manager, admin",
+      },
+      default: UserRole.USER,
+      set: (role: string) => role.toLowerCase(),
     },
   },
   {

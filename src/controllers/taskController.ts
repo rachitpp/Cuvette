@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Task, { TaskStatus } from "../models/Task";
 import User from "../models/User";
 import { withRetry, withTransaction, formatDbError } from "../utils/dbHelpers";
+import { paginationMiddleware } from "../middlewares/paginationMiddleware";
 
 // Create a new task
 export const createTask = async (
@@ -82,91 +83,97 @@ export const createTask = async (
 // Fetch tasks (owner or collaborator)
 export const getTasks = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.query.userId || req.user?._id;
-    const status = req.query.status as TaskStatus | undefined;
-    const priority = req.query.priority as string | undefined;
-    const sortBy = (req.query.sortBy as string) || "createdAt";
-    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
-    const tags = req.query.tags
-      ? (req.query.tags as string).split(",")
-      : undefined;
-    const category = req.query.category as string | undefined;
-    const searchTerm = req.query.search as string | undefined;
-    const isCollaborator = req.query.isCollaborator === "true";
-    const dueDateFrom = req.query.dueDateFrom as string | undefined;
-    const dueDateTo = req.query.dueDateTo as string | undefined;
-
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const skip = (page - 1) * limit;
-
-    if (!userId) {
-      res.status(400).json({ message: "User ID is required" });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
       return;
     }
 
-    const result = await withRetry(async () => {
-      const userExists = await User.findById(userId);
-      if (!userExists) throw new Error("User not found");
+    const userId = req.user?._id;
+    const {
+      status,
+      priority,
+      tags,
+      category,
+      search,
+      isCollaborator,
+      dueDateFrom,
+      dueDateTo,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
 
-      const query: any = {};
-      if (isCollaborator) {
-        query.$or = [{ userId: userId }, { collaborators: userId }];
-      } else {
-        query.userId = userId;
-      }
-      if (status) query.status = status;
-      if (priority) query.priority = priority;
-      if (tags && tags.length > 0) {
-        query.tags = { $in: tags };
-      }
-      if (category) query.category = category;
-      if (searchTerm) {
-        query.$or = [
-          { title: { $regex: searchTerm, $options: "i" } },
-          { description: { $regex: searchTerm, $options: "i" } },
-        ];
-      }
-      if (dueDateFrom || dueDateTo) {
-        query.dueDate = {};
-        if (dueDateFrom) {
-          query.dueDate.$gte = new Date(dueDateFrom);
-        }
-        if (dueDateTo) {
-          query.dueDate.$lte = new Date(dueDateTo);
-        }
-      }
+    // Build query
+    const query: any = {};
 
-      const tasks = await Task.find(query)
-        .populate("collaborators", "username email")
-        .sort({ [sortBy]: sortOrder })
-        .skip(skip)
-        .limit(limit);
-
-      const totalTasks = await Task.countDocuments(query);
-
-      return {
-        tasks,
-        pagination: {
-          totalTasks,
-          totalPages: Math.ceil(totalTasks / limit),
-          currentPage: page,
-          hasNextPage: page * limit < totalTasks,
-          hasPrevPage: page > 1,
-        },
-      };
-    });
-
-    res.json(result);
-  } catch (error: any) {
-    console.error("Error fetching tasks:", error);
-    const errorMessage = formatDbError(error);
-
-    if (error.message.includes("User not found")) {
-      res.status(404).json({ message: errorMessage });
+    // Base conditions
+    if (!isCollaborator || isCollaborator === "false") {
+      query.userId = userId;
     } else {
-      res.status(500).json({ message: "Server error", error: errorMessage });
+      query.$or = [{ userId }, { collaborators: userId }];
     }
+
+    // Status filter
+    if (status) {
+      query.status = status;
+    }
+
+    // Priority filter
+    if (priority) {
+      query.priority = priority;
+    }
+
+    // Tags filter
+    if (tags) {
+      query.tags = { $in: (tags as string).split(",") };
+    }
+
+    // Category filter
+    if (category) {
+      query.category = category;
+    }
+
+    // Search in title and description
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Due date range
+    if (dueDateFrom || dueDateTo) {
+      query.dueDate = {};
+      if (dueDateFrom) {
+        query.dueDate.$gte = new Date(dueDateFrom as string);
+      }
+      if (dueDateTo) {
+        query.dueDate.$lte = new Date(dueDateTo as string);
+      }
+    }
+
+    // Get total count for pagination
+    const total = await Task.countDocuments(query);
+
+    // Apply pagination
+    const { page = 1, limit = 10 } = req.pagination || {};
+    const skip = (page - 1) * limit;
+
+    // Execute query with pagination
+    const tasks = await Task.find(query)
+      .sort({ [sortBy as string]: sortOrder === "asc" ? 1 : -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("userId", "username email")
+      .populate("collaborators", "username email");
+
+    res.json({
+      data: tasks,
+      total,
+    });
+  } catch (error) {
+    console.error("Error fetching tasks:", error);
+    res.status(500).json({ message: "Error fetching tasks" });
   }
 };
 

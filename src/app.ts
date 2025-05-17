@@ -6,13 +6,24 @@ import swaggerJsdoc from "swagger-jsdoc";
 import userRoutes from "./routes/userRoutes";
 import taskRoutes from "./routes/taskRoutes";
 import { connectDB } from "./config/database";
+import { initRedis } from "./config/redis";
 import { getDbStats, isDbConnected } from "./utils/dbHelpers";
 import mongoose from "mongoose";
 import { errorHandler, notFound } from "./middlewares/errorMiddleware";
+import {
+  apiRateLimiter,
+  handleRateLimitError,
+} from "./middlewares/rateLimitMiddleware";
 import path from "path";
 
 // Load env vars from .env file
 dotenv.config();
+
+// Set NODE_ENV to development if not set
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = "development";
+  console.log("NODE_ENV not set, defaulting to development");
+}
 
 const app: Express = express();
 const port = process.env.PORT || 3000;
@@ -21,6 +32,16 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Apply rate limiting to all routes - only if not in development with no Redis
+if (!(process.env.NODE_ENV === "development" && !process.env.REDIS_URL)) {
+  try {
+    app.use(apiRateLimiter);
+    app.use(handleRateLimitError);
+  } catch (error) {
+    console.warn("Rate limiting could not be applied:", error);
+  }
+}
 
 // Swagger API docs setup
 const swaggerOptions = {
@@ -156,12 +177,36 @@ function shutdown() {
 
 // Start server only if not in test mode
 if (process.env.NODE_ENV !== "test") {
-  connectDB().then(() => {
+  const startServer = () => {
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);
       console.log(`Docs → http://localhost:${port}/api-docs`);
     });
-  });
+  };
+
+  // Connect to MongoDB first
+  connectDB()
+    .then(async () => {
+      try {
+        // Initialize Redis (will be mocked in development)
+        await initRedis();
+      } catch (error) {
+        // In production, Redis failure is critical
+        if (process.env.NODE_ENV === "production") {
+          console.error("Failed to initialize Redis in production:", error);
+          process.exit(1);
+        }
+        // In other environments, just log and continue
+        console.warn("Redis initialization warning:", error);
+      }
+
+      // Start the server
+      startServer();
+    })
+    .catch((error) => {
+      console.error("Failed to connect to MongoDB:", error);
+      process.exit(1);
+    });
 }
 
 export { app };

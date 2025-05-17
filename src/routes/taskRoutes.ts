@@ -10,6 +10,8 @@ import {
 } from "../controllers/taskController";
 import { protect } from "../middlewares/authMiddleware";
 import { TaskStatus } from "../models/Task";
+import User from "../models/User";
+import { paginationMiddleware } from "../middlewares/paginationMiddleware";
 
 const router = express.Router();
 
@@ -171,12 +173,26 @@ router.post(
       .withMessage("Category must be 30 characters or less"),
     body("collaborators")
       .optional()
-      .isArray()
-      .withMessage("Collaborators must be an array"),
+      .custom((value) => {
+        if (!Array.isArray(value)) {
+          throw new Error("Collaborators must be an array");
+        }
+        if (value.length > 10) {
+          throw new Error("Maximum 10 collaborators allowed");
+        }
+        return true;
+      }),
     body("collaborators.*")
       .optional()
       .isMongoId()
-      .withMessage("Each collaborator must be a valid MongoDB ID"),
+      .withMessage("Each collaborator must be a valid MongoDB ID")
+      .custom(async (value) => {
+        const userExists = await User.findById(value);
+        if (!userExists) {
+          throw new Error(`Collaborator with ID ${value} does not exist`);
+        }
+        return true;
+      }),
   ],
   createTask
 );
@@ -295,6 +311,7 @@ router.get(
       .isISO8601()
       .withMessage("dueDateTo must be a valid date"),
   ],
+  paginationMiddleware({ defaultLimit: 10, maxLimit: 50 }),
   getTasks
 );
 
@@ -460,12 +477,26 @@ router.patch(
       .withMessage("Category must be 30 characters or less"),
     body("collaborators")
       .optional()
-      .isArray()
-      .withMessage("Collaborators must be an array"),
+      .custom((value) => {
+        if (!Array.isArray(value)) {
+          throw new Error("Collaborators must be an array");
+        }
+        if (value.length > 10) {
+          throw new Error("Maximum 10 collaborators allowed");
+        }
+        return true;
+      }),
     body("collaborators.*")
       .optional()
       .isMongoId()
-      .withMessage("Each collaborator must be a valid MongoDB ID"),
+      .withMessage("Each collaborator must be a valid MongoDB ID")
+      .custom(async (value) => {
+        const userExists = await User.findById(value);
+        if (!userExists) {
+          throw new Error(`Collaborator with ID ${value} does not exist`);
+        }
+        return true;
+      }),
   ],
   updateTaskDetails
 );
