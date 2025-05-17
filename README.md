@@ -15,6 +15,13 @@
   <p>📚 <b>API Documentation:</b> <a href="https://cuvette-2ft9.onrender.com/api-docs" target="_blank">https://cuvette-2ft9.onrender.com/api-docs</a></p>
 </div>
 
+## 🔑 Admin Credentials
+
+For testing admin-specific routes and features:
+
+- **Email:** admin@example.com
+- **Password:** Admin123!
+
 ## ✨ Features
 
 ### 👤 User Management
@@ -53,11 +60,9 @@
 - **Unit Tests** - Comprehensive test coverage for controllers and models
 - **Mocked Dependencies** - Isolated testing with proper mocking
 - **Validation Testing** - Tests for all validation rules and edge cases
-
-### 📚 Documentation
-
-- **Swagger/OpenAPI** - Full API documentation with Swagger UI
-- **Health Checks** - Detailed health check endpoint with database status
+- **Mock Infrastructure** - Sophisticated mock system for Express, MongoDB, and Redis
+- **Type-Safe Mocks** - Strong TypeScript typing for all test mocks
+- **Resource Cleanup** - Proper cleanup of resources in test lifecycle hooks
 
 ## 🛠️ Tech Stack
 
@@ -69,6 +74,7 @@
 - **Testing**: Jest, Supertest
 - **Documentation**: Swagger/OpenAPI
 - **Error Handling**: Custom middleware and utils
+- **Caching**: Redis for response caching
 
 ## 🚀 Quick Start
 
@@ -127,6 +133,40 @@ npm test -- --coverage
 # Run tests in watch mode
 npm run test:watch
 ```
+
+## 📝 Recent Updates
+
+### Test Infrastructure Improvements
+
+1. **Enhanced Mock System**
+
+   - Created a comprehensive `setup.ts` file with proper TypeScript type definitions
+   - Structured mocks to be defined before module imports to prevent reference errors
+   - Implemented interfaces for better type checking: `MockRequest`, `MockExpress`, etc.
+
+2. **Supertest Mocks**
+
+   - Developed a sophisticated response map system for conditional test responses
+   - Added support for path-specific and method-specific response handling
+   - Implemented realistic API behavior simulation with proper status codes and response bodies
+
+3. **Resource Management**
+
+   - Added Redis client cleanup in afterAll hooks to prevent memory leaks
+   - Implemented proper cleanup for all test resources
+   - Fixed issues with hanging test processes
+
+4. **TypeScript Improvements**
+
+   - Added explicit return type annotations to mock functions
+   - Used type assertions to fix property access issues
+   - Implemented proper interfaces for all mock objects
+   - Fixed circular dependency issues in test files
+
+5. **Reliability Improvements**
+   - Fixed reference errors in test files
+   - Restructured mock definitions to ensure they're available before imports
+   - Added proper error handling in test lifecycle hooks
 
 ## 📡 API Endpoints
 
