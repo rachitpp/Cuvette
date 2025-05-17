@@ -1,6 +1,20 @@
 // This is the setup file for Jest tests - intentionally empty
 
 import { Request, Response, NextFunction } from "express";
+import { Mock } from "jest-mock";
+
+// Types for our request mock
+interface MockRequest {
+  get: jest.Mock;
+  post: jest.Mock;
+  put: jest.Mock;
+  patch: jest.Mock;
+  delete: jest.Mock;
+  set: jest.Mock;
+  send: jest.Mock;
+  query: jest.Mock;
+  then: jest.Mock;
+}
 
 // Create a mock Express app
 const mockApp = {
@@ -134,7 +148,7 @@ jest.mock("supertest", () => {
   let currentQuery: any = {};
 
   // Helper to determine response based on request details
-  const getResponse = () => {
+  const getResponse = (): { status: number; body: any } => {
     console.log(`Mock request: ${currentMethod} ${currentUrl}`, currentData);
 
     // Handle specific test URLs directly
@@ -234,38 +248,38 @@ jest.mock("supertest", () => {
     return endpointData.success || { status: 200, body: {} };
   };
 
-  const mockRequest = {
-    get: jest.fn((url) => {
+  const mockRequest: MockRequest = {
+    get: jest.fn((url: string): MockRequest => {
       currentUrl = url;
       currentMethod = "GET";
       return mockRequest;
     }),
-    post: jest.fn((url) => {
+    post: jest.fn((url: string): MockRequest => {
       currentUrl = url;
       currentMethod = "POST";
       return mockRequest;
     }),
-    put: jest.fn((url) => {
+    put: jest.fn((url: string): MockRequest => {
       currentUrl = url;
       currentMethod = "PUT";
       return mockRequest;
     }),
-    patch: jest.fn((url) => {
+    patch: jest.fn((url: string): MockRequest => {
       currentUrl = url;
       currentMethod = "PATCH";
       return mockRequest;
     }),
-    delete: jest.fn((url) => {
+    delete: jest.fn((url: string): MockRequest => {
       currentUrl = url;
       currentMethod = "DELETE";
       return mockRequest;
     }),
-    set: jest.fn(() => mockRequest),
-    send: jest.fn((data) => {
+    set: jest.fn((): MockRequest => mockRequest),
+    send: jest.fn((data: any): MockRequest => {
       currentData = data || {};
       return mockRequest;
     }),
-    query: jest.fn((params) => {
+    query: jest.fn((params: any): MockRequest => {
       currentQuery = params || {};
       return mockRequest;
     }),
@@ -285,9 +299,18 @@ const mockRouter = {
   use: jest.fn(),
 };
 
+// Define custom interface for our mock express
+interface MockExpress {
+  (): typeof mockApp;
+  Router: jest.Mock;
+  static: jest.Mock;
+  json: jest.Mock;
+  urlencoded: jest.Mock;
+}
+
 // Fix for express
 jest.mock("express", () => {
-  const mockExpress = jest.fn(() => mockApp);
+  const mockExpress = jest.fn(() => mockApp) as unknown as MockExpress;
   mockExpress.Router = jest.fn(() => mockRouter);
   mockExpress.static = jest.fn(
     () => (req: Request, res: Response, next: NextFunction) => next()
